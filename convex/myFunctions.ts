@@ -47,9 +47,15 @@ export const updateLocation = mutation({
     longitude: v.number(),
   },
   handler: async (ctx, args) => {
+    console.log('[updateLocation] called', { userId: args.userId, latitude: args.latitude, longitude: args.longitude });
+
     // Get username
     const user = await ctx.db.get(args.userId);
-    if (!user) throw new Error('User not found');
+    if (!user) {
+      console.log('[updateLocation] user not found', { userId: args.userId });
+      throw new Error('User not found');
+    }
+    console.log('[updateLocation] user found', { userId: args.userId, username: user.username });
 
     // Update user's lastSeen
     await ctx.db.patch(args.userId, { lastSeen: Date.now() });
@@ -67,15 +73,17 @@ export const updateLocation = mutation({
         longitude: args.longitude,
         timestamp: Date.now(),
       });
+      console.log('[updateLocation] updated location', { locationId: existingLocation._id });
     } else {
       // Create new location entry
-      await ctx.db.insert('locations', {
+      const insertedId = await ctx.db.insert('locations', {
         userId: args.userId,
         username: user.username,
         latitude: args.latitude,
         longitude: args.longitude,
         timestamp: Date.now(),
       });
+      console.log('[updateLocation] inserted location', { locationId: insertedId });
     }
   },
 });
@@ -86,7 +94,9 @@ export const getLocations = query({
     const locations = await ctx.db.query('locations').collect();
     // Filter out stale locations (older than 2 minutes)
     const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-    return locations.filter((loc) => loc.timestamp > twoMinutesAgo);
+    const recent = locations.filter((loc) => loc.timestamp > twoMinutesAgo);
+    console.log('[getLocations] returning locations', { total: locations.length, recent: recent.length });
+    return recent;
   },
 });
 

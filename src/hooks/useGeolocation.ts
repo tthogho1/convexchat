@@ -41,12 +41,16 @@ export function useGeolocation(userId: Id<'users'> | null, intervalSeconds: numb
           const { latitude, longitude } = position.coords;
           setState(() => ({ latitude, longitude, error: null }));
 
+          console.log('[useGeolocation] got position', { userId, latitude, longitude });
+
           // Send to Convex
+          console.log('[useGeolocation] sending location to server', { userId, latitude, longitude });
           void updateLocation({ userId, latitude, longitude }).catch((err) => {
-            console.error('Failed to update location:', err);
+            console.error('[useGeolocation] Failed to update location:', err);
           });
         },
         (error) => {
+          console.error('[useGeolocation] geolocation error', error.message);
           setState(() => ({
             latitude: null,
             longitude: null,
@@ -57,7 +61,7 @@ export function useGeolocation(userId: Id<'users'> | null, intervalSeconds: numb
           enableHighAccuracy: false,
           timeout: 10000,
           maximumAge: 0,
-        }
+        },
       );
     };
 

@@ -8,10 +8,18 @@ interface ChatProps {
   username: string;
 }
 
-export function Chat({ userId }: ChatProps) {
+export function Chat({ userId, username }: ChatProps) {
   const [message, setMessage] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const users = useQuery(api.myFunctions.getUsers) ?? [];
+  const [selectedUserId, setSelectedUserId] = useState<Id<'users'>>(userId);
+
+  // Keep selector in sync if prop changes
+  useEffect(() => {
+    setSelectedUserId(userId);
+  }, [userId]);
 
   const messages = useQuery(api.myFunctions.getMessages, { limit: 50 });
   const sendMessage = useMutation(api.myFunctions.sendMessage);
@@ -23,8 +31,8 @@ export function Chat({ userId }: ChatProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (message.trim()) {
-      void sendMessage({ userId, text: message.trim() });
+    if (message.trim() && selectedUserId) {
+      void sendMessage({ userId: selectedUserId, text: message.trim() });
       setMessage('');
     }
   };
@@ -33,7 +41,8 @@ export function Chat({ userId }: ChatProps) {
     <div
       className={`fixed bottom-0 right-0 m-4 bg-white dark:bg-slate-800 rounded-lg shadow-xl
                   border-2 border-gray-200 dark:border-gray-700 transition-all duration-300
-                  ${isExpanded ? 'w-96 h-[500px]' : 'w-96 h-14'}`}
+                  z-50 ${isExpanded ? 'w-96 h-[500px]' : 'w-96 h-14'}`}
+      style={{ zIndex: 9999 }}
     >
       {/* Header */}
       <div
@@ -44,10 +53,23 @@ export function Chat({ userId }: ChatProps) {
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-green-500 rounded-full"></div>
           <span className="font-semibold text-gray-900 dark:text-white">Chat</span>
+          {/* Sender selector in header */}
+          <select
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value as Id<'users'>)}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="ml-2 text-xs px-2 py-0.5 border rounded bg-white dark:bg-slate-700 dark:text-white"
+          >
+            {users.map((u) => (
+              <option key={u._id} value={u._id}>
+                {u.username}
+              </option>
+            ))}
+          </select>
           {messages && messages.length > 0 && !isExpanded && (
-            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
-              {messages.length}
-            </span>
+            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">{messages.length}</span>
           )}
         </div>
         <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
@@ -63,13 +85,8 @@ export function Chat({ userId }: ChatProps) {
             {messages?.map((msg, idx) => {
               const isOwnMessage = msg.userId === userId;
               return (
-                <div
-                  key={idx}
-                  className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}
-                >
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                    {msg.username}
-                  </div>
+                <div key={idx} className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{msg.username}</div>
                   <div
                     className={`max-w-[80%] px-3 py-2 rounded-lg ${
                       isOwnMessage
@@ -79,9 +96,7 @@ export function Chat({ userId }: ChatProps) {
                   >
                     {msg.text}
                   </div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    {new Date(msg.timestamp).toLocaleTimeString()}
-                  </div>
+                  <div className="text-xs text-gray-400 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</div>
                 </div>
               );
             })}

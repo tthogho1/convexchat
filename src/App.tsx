@@ -7,16 +7,11 @@ import { MapView } from './components/MapView';
 import { Chat } from './components/Chat';
 import { useGeolocation } from './hooks/useGeolocation';
 
-// Initialize state from localStorage
-const getInitialUsername = () => localStorage.getItem('mapChatUsername');
-const getInitialUserId = () => {
-  const id = localStorage.getItem('mapChatUserId');
-  return id ? (id as Id<'users'>) : null;
-};
+// Do not persist username/userId to localStorage; keep in-memory only
 
 export default function App() {
-  const [userId, setUserId] = useState<Id<'users'> | null>(getInitialUserId);
-  const [username, setUsername] = useState<string | null>(getInitialUsername);
+  const [userId, setUserId] = useState<Id<'users'> | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
 
   const createUser = useMutation(api.myFunctions.createUser);
   const locations = useQuery(api.myFunctions.getLocations) ?? [];
@@ -30,18 +25,13 @@ export default function App() {
       const newUserId = await createUser({ username: newUsername });
       setUsername(newUsername);
       setUserId(newUserId);
-
-      // Store in localStorage
-      localStorage.setItem('mapChatUsername', newUsername);
-      localStorage.setItem('mapChatUserId', newUserId);
+      // Do not persist credentials to localStorage; keep session in-memory
     } catch (error) {
       console.error('Failed to create user:', error);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('mapChatUsername');
-    localStorage.removeItem('mapChatUserId');
     setUsername(null);
     setUserId(null);
   };

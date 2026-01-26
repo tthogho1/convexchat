@@ -99,7 +99,7 @@ convex/
 
 - **Automatic Location Updates**: The `useGeolocation` hook fetches GPS position every 5 seconds
 - **Real-time Subscriptions**: Convex queries automatically update when data changes
-- **Persistent Login**: Username and user ID stored in localStorage
+- **Session-only Login**: Username and user ID are kept in-memory for the browser session (not persisted to `localStorage`)
 - **Map Auto-centering**: Map centers on your location when it updates
 
 ## Configuration

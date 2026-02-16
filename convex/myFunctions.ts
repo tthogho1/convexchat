@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { query, mutation } from './_generated/server';
+import { query, mutation, internalMutation } from './_generated/server';
 
 // User Management
 export const createUser = mutation({
@@ -105,6 +105,7 @@ export const sendMessage = mutation({
   args: {
     userId: v.id('users'),
     text: v.string(),
+    receiverId: v.optional(v.id('users')),
   },
   handler: async (ctx, args) => {
     // Get username
@@ -120,6 +121,7 @@ export const sendMessage = mutation({
       username: user.username,
       text: args.text,
       timestamp: Date.now(),
+      receiverId: args.receiverId,
     });
   },
 });
@@ -127,6 +129,7 @@ export const sendMessage = mutation({
 export const getMessages = query({
   args: {
     limit: v.optional(v.number()),
+    userId: v.optional(v.id('users')),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
@@ -134,7 +137,70 @@ export const getMessages = query({
       .query('messages')
       .withIndex('by_timestamp', (q) => q.gt('timestamp', 0))
       .order('desc')
-      .take(limit);
-    return messages.reverse();
+      .take(limit * 2);
+
+    // Filter: show messages where receiverId is null (broadcast)
+    // or receiverId matches the current user
+    // or the current user is the sender
+    const filtered = args.userId
+      ? messages.filter(
+          (msg) =>
+            msg.receiverId === undefined ||
+            msg.receiverId === args.userId ||
+            msg.userId === args.userId,
+        )
+      : messages;
+
+    return filtered.slice(0, limit).reverse();
+  },
+});
+
+// Cleanup: remove old locations and their users
+export const cleanupOldLocationsAndUsers = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const oneMinuteAgo = Date.now() - 60 * 1000;
+    const allLocations = await ctx.db.query('locations').collect();
+
+    // Find and delete old locations, collect their userIds
+    const removedUserIds: Set<any> = new Set();
+    for (const loc of allLocations) {
+      if (loc.timestamp < oneMinuteAgo) {
+        removedUserIds.add(loc.userId);
+        await ctx.db.delete(loc._id);
+      }
+    }
+
+    // Check which removed users still have remaining locations
+    const remainingLocations = await ctx.db.query('locations').collect();
+    const remainingUserIds = new Set(remainingLocations.map((loc) => loc.userId));
+
+    // Delete users who no longer have any location
+    for (const userId of removedUserIds) {
+      if (!remainingUserIds.has(userId)) {
+        await ctx.db.delete(userId);
+      }
+    }
+
+    return null;
+  },
+});
+
+// Delete all received messages for a user
+export const deleteReceivedMessages = mutation({
+  args: {
+    userId: v.id('users'),
+  },
+  handler: async (ctx, args) => {
+    const receivedMessages = await ctx.db
+      .query('messages')
+      .withIndex('by_receiver', (q) => q.eq('receiverId', args.userId))
+      .collect();
+
+    for (const msg of receivedMessages) {
+      await ctx.db.delete(msg._id);
+    }
+
+    return null;
   },
 });

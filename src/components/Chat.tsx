@@ -15,14 +15,16 @@ export function Chat({ userId, username }: ChatProps) {
 
   const users = useQuery(api.myFunctions.getUsers) ?? [];
   const [selectedUserId, setSelectedUserId] = useState<Id<'users'>>(userId);
+  const [receiverId, setReceiverId] = useState<Id<'users'> | 'all'>('all');
 
   // Keep selector in sync if prop changes
   useEffect(() => {
     setSelectedUserId(userId);
   }, [userId]);
 
-  const messages = useQuery(api.myFunctions.getMessages, { limit: 50 });
+  const messages = useQuery(api.myFunctions.getMessages, { limit: 50, userId });
   const sendMessage = useMutation(api.myFunctions.sendMessage);
+  const deleteReceived = useMutation(api.myFunctions.deleteReceivedMessages);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -32,7 +34,11 @@ export function Chat({ userId, username }: ChatProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim() && selectedUserId) {
-      void sendMessage({ userId: selectedUserId, text: message.trim() });
+      void sendMessage({
+        userId: selectedUserId,
+        text: message.trim(),
+        ...(receiverId !== 'all' ? { receiverId } : {}),
+      });
       setMessage('');
     }
   };
@@ -72,9 +78,23 @@ export function Chat({ userId, username }: ChatProps) {
             <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">{messages.length}</span>
           )}
         </div>
-        <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-          {isExpanded ? '−' : '+'}
-        </button>
+        <div className="flex items-center gap-1">
+          {isExpanded && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                void deleteReceived({ userId });
+              }}
+              className="text-xs text-red-500 hover:text-red-700 px-1"
+              title="Delete all received messages"
+            >
+              Clear
+            </button>
+          )}
+          <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+            {isExpanded ? '−' : '+'}
+          </button>
+        </div>
       </div>
 
       {/* Chat Content */}
@@ -84,9 +104,13 @@ export function Chat({ userId, username }: ChatProps) {
           <div className="h-[380px] overflow-y-auto p-4 space-y-3">
             {messages?.map((msg, idx) => {
               const isOwnMessage = msg.userId === userId;
+              const isDM = msg.receiverId !== undefined;
               return (
                 <div key={idx} className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{msg.username}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    {msg.username}
+                    {isDM && <span className="ml-1 text-purple-500">(DM)</span>}
+                  </div>
                   <div
                     className={`max-w-[80%] px-3 py-2 rounded-lg ${
                       isOwnMessage
@@ -105,6 +129,23 @@ export function Chat({ userId, username }: ChatProps) {
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="p-3 border-t-2 border-gray-200 dark:border-gray-700">
+            <div className="flex gap-2 mb-2">
+              <label className="text-xs text-gray-500 dark:text-gray-400 self-center">To:</label>
+              <select
+                value={receiverId}
+                onChange={(e) => setReceiverId(e.target.value as Id<'users'> | 'all')}
+                className="flex-1 text-xs px-2 py-1 border rounded bg-white dark:bg-slate-700 dark:text-white"
+              >
+                <option value="all">Everyone (broadcast)</option>
+                {users
+                  .filter((u) => u._id !== userId)
+                  .map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.username}
+                    </option>
+                  ))}
+              </select>
+            </div>
             <div className="flex gap-2">
               <input
                 type="text"

@@ -20,5 +20,8 @@ export default defineSchema({
     username: v.string(),
     text: v.string(),
     timestamp: v.number(),
-  }).index('by_timestamp', ['timestamp']),
+    receiverId: v.optional(v.id('users')),
+  })
+    .index('by_timestamp', ['timestamp'])
+    .index('by_receiver', ['receiverId', 'timestamp']),
 });

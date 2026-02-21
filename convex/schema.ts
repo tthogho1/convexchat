@@ -15,6 +15,7 @@ export default defineSchema({
     latitude: v.number(),
     longitude: v.number(),
     timestamp: v.number(),
+    group: v.optional(v.string()),
   }).index('by_user', ['userId']),
 
   messages: defineTable({

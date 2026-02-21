@@ -23,11 +23,13 @@ interface Location {
   latitude: number;
   longitude: number;
   timestamp: number;
+  group?: string;
 }
 
 interface MapViewProps {
   locations: Location[];
   currentUserId: string;
+  currentUserGroup?: string;
 }
 
 // Component to recenter map when user's location changes
@@ -42,8 +44,15 @@ function RecenterMap({ center }: { center: LatLngExpression }) {
 }
 
 export function MapView({ locations, currentUserId }: MapViewProps) {
+  // Filter locations: show only users in the same group when currentUserGroup is provided,
+  // but always include the current user's own location.
+  const visibleLocations = locations.filter(
+    (loc) => loc.userId === currentUserId || !currentUserGroup || loc.group === currentUserGroup,
+  );
+
   // Find current user's location or use default
-  const currentUserLocation = locations.find((loc) => loc.userId === currentUserId);
+  const currentUserLocation = visibleLocations.find((loc) => loc.userId === currentUserId) ||
+    locations.find((loc) => loc.userId === currentUserId);
   const center: LatLngExpression = currentUserLocation
     ? [currentUserLocation.latitude, currentUserLocation.longitude]
     : [37.7749, -122.4194]; // Default: San Francisco
@@ -72,7 +81,7 @@ export function MapView({ locations, currentUserId }: MapViewProps) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <RecenterMap center={center} />
-        {locations.map((location) => {
+        {visibleLocations.map((location) => {
           const isCurrentUser = location.userId === currentUserId;
           return (
             <Marker

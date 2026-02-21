@@ -90,7 +90,7 @@ export default function App() {
 
       {/* Map */}
       <main className="flex-1 relative">
-        <MapView locations={locations} currentUserId={userId} />
+        <MapView locations={locations} currentUserId={userId} currentUserGroup={group ?? undefined} />
       </main>
 
       {/* Chat */}

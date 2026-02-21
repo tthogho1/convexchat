@@ -78,21 +78,29 @@ export const updateLocation = mutation({
 
     if (existingLocation) {
       // Update existing location
-      await ctx.db.patch(existingLocation._id, {
+      const patchData: Record<string, unknown> = {
         latitude: args.latitude,
         longitude: args.longitude,
         timestamp: Date.now(),
-      });
+      };
+      if (typeof (user as any).group === 'string') {
+        patchData.group = (user as any).group;
+      }
+      await ctx.db.patch(existingLocation._id, patchData);
       console.log('[updateLocation] updated location', { locationId: existingLocation._id });
     } else {
       // Create new location entry
-      const insertedId = await ctx.db.insert('locations', {
+      const loc: Record<string, unknown> = {
         userId: args.userId,
         username: user.username,
         latitude: args.latitude,
         longitude: args.longitude,
         timestamp: Date.now(),
-      });
+      };
+      if (typeof (user as any).group === 'string') {
+        loc.group = (user as any).group;
+      }
+      const insertedId = await ctx.db.insert('locations', loc);
       console.log('[updateLocation] inserted location', { locationId: insertedId });
     }
   },

@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { query, mutation, internalMutation } from './_generated/server';
+import type { Id } from './_generated/dataModel';
 
 // User Management
 export const createUser = mutation({
@@ -90,7 +91,14 @@ export const updateLocation = mutation({
       console.log('[updateLocation] updated location', { locationId: existingLocation._id });
     } else {
       // Create new location entry
-      const loc: Record<string, unknown> = {
+      const loc: {
+        userId: Id<'users'>;
+        username: string;
+        latitude: number;
+        longitude: number;
+        timestamp: number;
+        group?: string;
+      } = {
         userId: args.userId,
         username: user.username,
         latitude: args.latitude,

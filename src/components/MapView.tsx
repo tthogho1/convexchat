@@ -43,7 +43,7 @@ function RecenterMap({ center }: { center: LatLngExpression }) {
   return null;
 }
 
-export function MapView({ locations, currentUserId }: MapViewProps) {
+export function MapView({ locations, currentUserId, currentUserGroup }: MapViewProps) {
   // Filter locations: show only users in the same group when currentUserGroup is provided,
   // but always include the current user's own location.
   const visibleLocations = locations.filter(

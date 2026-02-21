@@ -5,6 +5,7 @@ import { query, mutation, internalMutation } from './_generated/server';
 export const createUser = mutation({
   args: {
     username: v.string(),
+    group: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Check if user already exists
@@ -14,16 +15,25 @@ export const createUser = mutation({
       .first();
 
     if (existing) {
-      // Update lastSeen
-      await ctx.db.patch(existing._id, { lastSeen: Date.now() });
+      // Treat this as a login: update lastSeen and createdAt to now
+      const now = Date.now();
+      const patchData: Record<string, unknown> = { lastSeen: now, createdAt: now };
+      if (args.group) {
+        patchData.group = args.group;
+      }
+      await ctx.db.patch(existing._id, patchData);
       return existing._id;
     }
 
     // Create new user
-    const userId = await ctx.db.insert('users', {
+    const now = Date.now();
+    const newUser: { username: string; lastSeen: number; createdAt: number; group?: string } = {
       username: args.username,
-      lastSeen: Date.now(),
-    });
+      lastSeen: now,
+      createdAt: now,
+      group: args.group,
+    };
+    const userId = await ctx.db.insert('users', newUser);
 
     return userId;
   },
@@ -139,13 +149,18 @@ export const getMessages = query({
       .order('desc')
       .take(limit * 2);
 
-    // Determine cutoff timestamp: if userId provided, only return messages
-    // with timestamp >= the user's lastSeen (login) time. Otherwise include all.
+    // Determine cutoff timestamp: if userId provided, use user's `createdAt`
+    // (repurposed as login time). Fall back to `lastSeen` if `createdAt` is
+    // not available. If neither exists, include all messages.
     let since = 0;
     if (args.userId) {
       const user = await ctx.db.get(args.userId);
-      if (user && typeof user.lastSeen === 'number') {
-        since = user.lastSeen;
+      if (user) {
+        if (typeof user.createdAt === 'number') {
+          since = user.createdAt;
+        } else if (typeof user.lastSeen === 'number') {
+          since = user.lastSeen;
+        }
       }
     }
 

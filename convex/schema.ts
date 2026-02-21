@@ -5,6 +5,8 @@ export default defineSchema({
   users: defineTable({
     username: v.string(),
     lastSeen: v.number(), // timestamp
+    createdAt: v.number(), // account creation / login time used for message filtering
+    group: v.optional(v.string()),
   }).index('by_username', ['username']),
 
   locations: defineTable({

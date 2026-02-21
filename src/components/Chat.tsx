@@ -56,9 +56,28 @@ export function Chat({ userId, username }: ChatProps) {
           <div className="w-3 h-3 bg-green-500 rounded-full"></div>
           <span className="font-semibold text-gray-900 dark:text-white">Chat</span>
           {/* Messages are always sent as the logged-in user */}
-          {messages && messages.length > 0 && !isExpanded && (
-            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">{messages.length}</span>
-          )}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 dark:text-gray-400">To:</label>
+            <select
+              value={receiverId}
+              onChange={(e) => setReceiverId(e.target.value as Id<'users'> | 'all')}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="text-xs px-2 py-0.5 border rounded bg-white dark:bg-slate-700 dark:text-white"
+            >
+              <option value="all">Everyone</option>
+              {users.filter((u) => u._id !== userId).map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.username}
+                </option>
+              ))}
+            </select>
+
+            {messages && messages.length > 0 && !isExpanded && (
+              <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">{messages.length}</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1">
           {isExpanded && (
@@ -111,23 +130,6 @@ export function Chat({ userId, username }: ChatProps) {
 
           {/* Input */}
           <form onSubmit={handleSubmit} className="p-3 border-t-2 border-gray-200 dark:border-gray-700">
-            <div className="flex gap-2 mb-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400 self-center">To:</label>
-              <select
-                value={receiverId}
-                onChange={(e) => setReceiverId(e.target.value as Id<'users'> | 'all')}
-                className="flex-1 text-xs px-2 py-1 border rounded bg-white dark:bg-slate-700 dark:text-white"
-              >
-                <option value="all">Everyone (broadcast)</option>
-                {users
-                  .filter((u) => u._id !== userId)
-                  .map((u) => (
-                    <option key={u._id} value={u._id}>
-                      {u.username}
-                    </option>
-                  ))}
-              </select>
-            </div>
             <div className="flex gap-2">
               <input
                 type="text"

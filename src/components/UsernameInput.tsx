@@ -1,16 +1,18 @@
 import { useState } from 'react';
 
 interface UsernameInputProps {
-  onSubmit: (username: string) => void;
+  onSubmit: (username: string, group?: string) => void;
 }
 
 export function UsernameInput({ onSubmit }: UsernameInputProps) {
   const [username, setUsername] = useState('');
+  const [group, setGroup] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (username.trim()) {
-      onSubmit(username.trim());
+      const groupValue = group.trim() || undefined;
+      onSubmit(username.trim(), groupValue);
     }
   };
 
@@ -33,6 +35,15 @@ export function UsernameInput({ onSubmit }: UsernameInputProps) {
                      focus:outline-none focus:border-blue-500 dark:bg-slate-700 dark:text-white mb-4"
             maxLength={20}
             autoFocus
+          />
+          <input
+            type="text"
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            placeholder="Group (optional)"
+            className="w-full px-4 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg
+                     focus:outline-none focus:border-blue-500 dark:bg-slate-700 dark:text-white mb-4"
+            maxLength={30}
           />
           <button
             type="submit"

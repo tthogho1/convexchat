@@ -5,6 +5,7 @@ import { query, mutation, internalMutation } from './_generated/server';
 export const createUser = mutation({
   args: {
     username: v.string(),
+    group: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Check if user already exists
@@ -14,16 +15,25 @@ export const createUser = mutation({
       .first();
 
     if (existing) {
-      // Update lastSeen
-      await ctx.db.patch(existing._id, { lastSeen: Date.now() });
+      // Treat this as a login: update lastSeen and createdAt to now
+      const now = Date.now();
+      const patchData: Record<string, unknown> = { lastSeen: now, createdAt: now };
+      if (args.group) {
+        patchData.group = args.group;
+      }
+      await ctx.db.patch(existing._id, patchData);
       return existing._id;
     }
 
     // Create new user
-    const userId = await ctx.db.insert('users', {
+    const now = Date.now();
+    const newUser: { username: string; lastSeen: number; createdAt: number; group?: string } = {
       username: args.username,
-      lastSeen: Date.now(),
-    });
+      lastSeen: now,
+      createdAt: now,
+      group: args.group,
+    };
+    const userId = await ctx.db.insert('users', newUser);
 
     return userId;
   },
@@ -139,17 +149,29 @@ export const getMessages = query({
       .order('desc')
       .take(limit * 2);
 
-    // Filter: show messages where receiverId is null (broadcast)
-    // or receiverId matches the current user
-    // or the current user is the sender
+    // Determine cutoff timestamp: if userId provided, use user's `createdAt`
+    // (repurposed as login time). Fall back to `lastSeen` if `createdAt` is
+    // not available. If neither exists, include all messages.
+    let since = 0;
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user) {
+        if (typeof user.createdAt === 'number') {
+          since = user.createdAt;
+        } else if (typeof user.lastSeen === 'number') {
+          since = user.lastSeen;
+        }
+      }
+    }
+
+    // Filter messages by receiver/sender logic AND by timestamp >= since
     const filtered = args.userId
       ? messages.filter(
           (msg) =>
-            msg.receiverId === undefined ||
-            msg.receiverId === args.userId ||
-            msg.userId === args.userId,
+            msg.timestamp >= since &&
+            (msg.receiverId === undefined || msg.receiverId === args.userId || msg.userId === args.userId),
         )
-      : messages;
+      : messages.filter((msg) => msg.timestamp >= since);
 
     return filtered.slice(0, limit).reverse();
   },

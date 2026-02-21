@@ -12,6 +12,7 @@ import { useGeolocation } from './hooks/useGeolocation';
 export default function App() {
   const [userId, setUserId] = useState<Id<'users'> | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [group, setGroup] = useState<string | null>(null);
 
   const createUser = useMutation(api.myFunctions.createUser);
   const locations = useQuery(api.myFunctions.getLocations) ?? [];
@@ -20,10 +21,13 @@ export default function App() {
   // Use geolocation hook (updates every 5 seconds)
   const { latitude, longitude, error: geoError } = useGeolocation(userId, 5);
 
-  const handleUsernameSubmit = async (newUsername: string) => {
+  const handleUsernameSubmit = async (newUsername: string, newGroup?: string) => {
     try {
-      const newUserId = await createUser({ username: newUsername });
+      const payload: Record<string, unknown> = { username: newUsername };
+      if (newGroup) payload.group = newGroup;
+      const newUserId = await createUser(payload as any);
       setUsername(newUsername);
+      setGroup(newGroup ?? null);
       setUserId(newUserId);
       // Do not persist credentials to localStorage; keep session in-memory
     } catch (error) {
@@ -38,7 +42,7 @@ export default function App() {
 
   // Show username input if not logged in
   if (!username || !userId) {
-    return <UsernameInput onSubmit={(name) => void handleUsernameSubmit(name)} />;
+    return <UsernameInput onSubmit={(name, grp) => void handleUsernameSubmit(name, grp)} />;
   }
 
   return (

@@ -139,17 +139,24 @@ export const getMessages = query({
       .order('desc')
       .take(limit * 2);
 
-    // Filter: show messages where receiverId is null (broadcast)
-    // or receiverId matches the current user
-    // or the current user is the sender
+    // Determine cutoff timestamp: if userId provided, only return messages
+    // with timestamp >= the user's lastSeen (login) time. Otherwise include all.
+    let since = 0;
+    if (args.userId) {
+      const user = await ctx.db.get(args.userId);
+      if (user && typeof user.lastSeen === 'number') {
+        since = user.lastSeen;
+      }
+    }
+
+    // Filter messages by receiver/sender logic AND by timestamp >= since
     const filtered = args.userId
       ? messages.filter(
           (msg) =>
-            msg.receiverId === undefined ||
-            msg.receiverId === args.userId ||
-            msg.userId === args.userId,
+            msg.timestamp >= since &&
+            (msg.receiverId === undefined || msg.receiverId === args.userId || msg.userId === args.userId),
         )
-      : messages;
+      : messages.filter((msg) => msg.timestamp >= since);
 
     return filtered.slice(0, limit).reverse();
   },

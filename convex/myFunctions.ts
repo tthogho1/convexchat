@@ -126,12 +126,36 @@ export const getLocations = query({
   },
 });
 
+// Server-side group-filtered locations: returns locations in the same group
+// as `currentUserGroup`, and always includes the `currentUserId` location.
+export const getLocationsForGroup = query({
+  args: {
+    currentUserId: v.optional(v.id('users')),
+    currentUserGroup: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const locations = await ctx.db.query('locations').collect();
+    const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+    const recent = locations.filter((loc) => loc.timestamp > twoMinutesAgo);
+
+    const filtered = recent.filter((loc) => {
+      if (args.currentUserId && loc.userId === args.currentUserId) return true;
+      //if (!args.currentUserGroup) return false;
+      return String(loc.group ?? '') === String(args.currentUserGroup);
+    });
+
+    console.log('[getLocationsForGroup] returning', { requestedGroup: args.currentUserGroup, total: filtered.length });
+    return filtered;
+  },
+});
+
 // Chat Messages
 export const sendMessage = mutation({
   args: {
     userId: v.id('users'),
     text: v.string(),
     receiverId: v.optional(v.id('users')),
+    group: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Get username
@@ -141,6 +165,9 @@ export const sendMessage = mutation({
     // Update user's lastSeen
     await ctx.db.patch(args.userId, { lastSeen: Date.now() });
 
+    // Determine group for the message: prefer explicit arg, fall back to user's group
+    const messageGroup = typeof args.group === 'string' ? args.group : (user as any).group;
+
     // Insert message
     await ctx.db.insert('messages', {
       userId: args.userId,
@@ -148,6 +175,7 @@ export const sendMessage = mutation({
       text: args.text,
       timestamp: Date.now(),
       receiverId: args.receiverId,
+      group: messageGroup,
     });
   },
 });
@@ -156,6 +184,7 @@ export const getMessages = query({
   args: {
     limit: v.optional(v.number()),
     userId: v.optional(v.id('users')),
+    currentUserGroup: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
@@ -180,14 +209,27 @@ export const getMessages = query({
       }
     }
 
-    // Filter messages by receiver/sender logic AND by timestamp >= since
-    const filtered = args.userId
-      ? messages.filter(
-          (msg) =>
-            msg.timestamp >= since &&
-            (msg.receiverId === undefined || msg.receiverId === args.userId || msg.userId === args.userId),
-        )
-      : messages.filter((msg) => msg.timestamp >= since);
+    // Filter messages by receiver/sender logic AND by timestamp >= since.
+    // Also apply optional group filtering via `currentUserGroup` for broadcasts.
+    const filtered = messages.filter((msg) => {
+      if (msg.timestamp < since) return false;
+
+      // Direct messages to/from the user are always included when userId is provided
+      if (args.userId && (msg.receiverId === args.userId || msg.userId === args.userId)) return true;
+
+      // Broadcast messages (no receiverId): include depending on group selection
+      if (msg.receiverId === undefined) {
+        // If no group requested, include all broadcasts
+        if (!args.currentUserGroup || args.currentUserGroup === 'all') return true;
+        // Otherwise include broadcast only if message group matches requested group
+        return String(msg.group ?? '') === String(args.currentUserGroup);
+      }
+
+      // Messages that specify a receiver but also have a group: include if group matches requested
+      if (args.currentUserGroup && String(msg.group ?? '') === String(args.currentUserGroup)) return true;
+
+      return false;
+    });
 
     return filtered.slice(0, limit).reverse();
   },

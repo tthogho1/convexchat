@@ -15,7 +15,10 @@ export default function App() {
   const [group, setGroup] = useState<string | null>(null);
 
   const createUser = useMutation(api.myFunctions.createUser);
-  const locations = useQuery(api.myFunctions.getLocations) ?? [];
+  const locations = useQuery(api.myFunctions.getLocationsForGroup, {
+    currentUserId: userId ?? undefined,
+    currentUserGroup: group ?? undefined,
+  }) ?? [];
   const users = useQuery(api.myFunctions.getUsers) ?? [];
 
   // Use geolocation hook (updates every 5 seconds)

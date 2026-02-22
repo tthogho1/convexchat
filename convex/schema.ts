@@ -24,6 +24,7 @@ export default defineSchema({
     text: v.string(),
     timestamp: v.number(),
     receiverId: v.optional(v.id('users')),
+    group: v.optional(v.string()),
   })
     .index('by_timestamp', ['timestamp'])
     .index('by_receiver', ['receiverId', 'timestamp']),

@@ -50,6 +50,20 @@ export const getUsers = query({
   },
 });
 
+export const getUsersByGroup = query({
+  args: {
+    group: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const users = await ctx.db.query('users').collect();
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    return users.filter((user) =>
+      user.lastSeen > fiveMinutesAgo &&
+      (user as any).group === args.group
+    );
+  },
+});
+
 // Location Tracking
 export const updateLocation = mutation({
   args: {

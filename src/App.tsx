@@ -97,7 +97,7 @@ export default function App() {
       </main>
 
       {/* Chat */}
-      <Chat userId={userId} username={username} />
+      <Chat userId={userId} username={username} userGroup={group} />
     </div>
   );
 }

@@ -6,26 +6,20 @@ import { Id } from '../../convex/_generated/dataModel';
 interface ChatProps {
   userId: Id<'users'>;
   username: string;
+  userGroup?: string | null;
 }
 
-export function Chat({ userId, username }: ChatProps) {
+export function Chat({ userId, username, userGroup }: ChatProps) {
   const [message, setMessage] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const users = useQuery(api.myFunctions.getUsers) ?? [];
+  const users = userGroup
+    ? useQuery(api.myFunctions.getUsersByGroup, { group: userGroup }) ?? []
+    : useQuery(api.myFunctions.getUsers) ?? [];
   const [receiverId, setReceiverId] = useState<Id<'users'> | 'all'>('all');
-  const [selectedGroup, setSelectedGroup] = useState<'all' | 'my' | string>('all');
 
-  // No sender selector: always send as the logged-in user
-
-  // Resolve current user's group (from the users query)
-  const myUser = users.find((u: any) => u._id === userId);
-  const myGroup = (myUser as any)?.group as string | undefined;
-  const resolvedGroup =
-    selectedGroup === 'all' ? 'all' : selectedGroup === 'my' ? myGroup ?? 'all' : selectedGroup;
-
-  const messages = useQuery(api.myFunctions.getMessages, { limit: 50, userId, currentUserGroup: resolvedGroup });
+  const messages = useQuery(api.myFunctions.getMessages, { limit: 50, userId });
   const sendMessage = useMutation(api.myFunctions.sendMessage);
   const deleteReceived = useMutation(api.myFunctions.deleteReceivedMessages);
 
@@ -41,7 +35,6 @@ export function Chat({ userId, username }: ChatProps) {
         userId,
         text: message.trim(),
         ...(receiverId !== 'all' ? { receiverId } : {}),
-        ...(resolvedGroup && resolvedGroup !== 'all' ? { group: resolvedGroup } : {}),
       });
       setMessage('');
     }
@@ -78,24 +71,6 @@ export function Chat({ userId, username }: ChatProps) {
               {users.filter((u) => u._id !== userId).map((u) => (
                 <option key={u._id} value={u._id}>
                   {u.username}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={selectedGroup}
-              onChange={(e) => setSelectedGroup(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              className="text-xs px-2 py-0.5 border rounded bg-white dark:bg-slate-700 dark:text-white"
-              title="Filter messages by group"
-            >
-              <option value="all">All (Everyone)</option>
-              <option value="my">My Group</option>
-              {[...new Set(users.map((u: any) => u.group).filter(Boolean))].map((g) => (
-                <option key={g} value={g}>
-                  {g}
                 </option>
               ))}
             </select>

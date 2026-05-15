@@ -5,18 +5,17 @@ import { Id } from '../../convex/_generated/dataModel';
 
 interface ChatProps {
   userId: Id<'users'>;
-  username: string;
   userGroup?: string | null;
 }
 
-export function Chat({ userId, username, userGroup }: ChatProps) {
+export function Chat({ userId, userGroup }: ChatProps) {
   const [message, setMessage] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const users = userGroup
-    ? useQuery(api.myFunctions.getUsersByGroup, { group: userGroup }) ?? []
-    : useQuery(api.myFunctions.getUsers) ?? [];
+  const users = useQuery(api.myFunctions.getUsers, {
+    group: userGroup ?? undefined,
+  }) ?? [];
   const [receiverId, setReceiverId] = useState<Id<'users'> | 'all'>('all');
 
   const messages = useQuery(api.myFunctions.getMessages, { limit: 50, userId });

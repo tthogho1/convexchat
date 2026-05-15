@@ -19,20 +19,17 @@ export default function App() {
     currentUserId: userId ?? undefined,
     currentUserGroup: group ?? undefined,
   }) ?? [];
-  const users = useQuery(api.myFunctions.getUsers) ?? [];
+  const users = useQuery(api.myFunctions.getUsers, {}) ?? [];
 
   // Use geolocation hook (updates every 5 seconds)
   const { latitude, longitude, error: geoError } = useGeolocation(userId, 5);
 
   const handleUsernameSubmit = async (newUsername: string, newGroup?: string) => {
     try {
-      const payload: Record<string, unknown> = { username: newUsername };
-      if (newGroup) payload.group = newGroup;
-      const newUserId = await createUser(payload as any);
+      const newUserId = await createUser({ username: newUsername, group: newGroup });
       setUsername(newUsername);
       setGroup(newGroup ?? null);
       setUserId(newUserId);
-      // Do not persist credentials to localStorage; keep session in-memory
     } catch (error) {
       console.error('Failed to create user:', error);
     }
@@ -93,11 +90,16 @@ export default function App() {
 
       {/* Map */}
       <main className="flex-1 relative">
-        <MapView locations={locations} currentUserId={userId} currentUserGroup={group ?? undefined} />
+        <MapView
+          locations={locations}
+          currentUserId={userId}
+          liveLatitude={latitude}
+          liveLongitude={longitude}
+        />
       </main>
 
       {/* Chat */}
-      <Chat userId={userId} username={username} userGroup={group} />
+      <Chat userId={userId} userGroup={group} />
     </div>
   );
 }

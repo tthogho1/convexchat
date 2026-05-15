@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 import { query, mutation, internalMutation } from './_generated/server';
-import type { Id } from './_generated/dataModel';
+import { usernameSchema } from './validation';
 
 // User Management
 export const createUser = mutation({
@@ -9,6 +9,9 @@ export const createUser = mutation({
     group: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Throws ZodError (surfaced as a ConvexError to the client) on bad input.
+    usernameSchema.parse(args.username);
+
     // Check if user already exists
     const existing = await ctx.db
       .query('users')
@@ -41,26 +44,17 @@ export const createUser = mutation({
 });
 
 export const getUsers = query({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query('users').collect();
-    // Filter out users who haven't been seen in the last 5 minutes
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    return users.filter((user) => user.lastSeen > fiveMinutesAgo);
-  },
-});
-
-export const getUsersByGroup = query({
   args: {
-    group: v.string(),
+    group: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const users = await ctx.db.query('users').collect();
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    return users.filter((user) =>
-      user.lastSeen > fiveMinutesAgo &&
-      (user as any).group === args.group
-    );
+    return users.filter((user) => {
+      if (user.lastSeen <= fiveMinutesAgo) return false;
+      if (args.group !== undefined && user.group !== args.group) return false;
+      return true;
+    });
   },
 });
 
@@ -92,37 +86,22 @@ export const updateLocation = mutation({
       .first();
 
     if (existingLocation) {
-      // Update existing location
-      const patchData: Record<string, unknown> = {
+      await ctx.db.patch(existingLocation._id, {
         latitude: args.latitude,
         longitude: args.longitude,
         timestamp: Date.now(),
-      };
-      if (typeof (user as any).group === 'string') {
-        patchData.group = (user as any).group;
-      }
-      await ctx.db.patch(existingLocation._id, patchData);
+        group: user.group,
+      });
       console.log('[updateLocation] updated location', { locationId: existingLocation._id });
     } else {
-      // Create new location entry
-      const loc: {
-        userId: Id<'users'>;
-        username: string;
-        latitude: number;
-        longitude: number;
-        timestamp: number;
-        group?: string;
-      } = {
+      const insertedId = await ctx.db.insert('locations', {
         userId: args.userId,
         username: user.username,
         latitude: args.latitude,
         longitude: args.longitude,
         timestamp: Date.now(),
-      };
-      if (typeof (user as any).group === 'string') {
-        loc.group = (user as any).group;
-      }
-      const insertedId = await ctx.db.insert('locations', loc);
+        group: user.group,
+      });
       console.log('[updateLocation] inserted location', { locationId: insertedId });
     }
   },
@@ -179,8 +158,8 @@ export const sendMessage = mutation({
     // Update user's lastSeen
     await ctx.db.patch(args.userId, { lastSeen: Date.now() });
 
-    // Determine group for the message: prefer explicit arg, fall back to user's group
-    const messageGroup = typeof args.group === 'string' ? args.group : (user as any).group;
+    // Prefer explicit arg, fall back to user's group
+    const messageGroup = args.group ?? user.group;
 
     // Insert message
     await ctx.db.insert('messages', {

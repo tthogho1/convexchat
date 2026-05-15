@@ -34,3 +34,39 @@ body,
 .leaflet-container {
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/*
+ * Custom person marker (used by createPersonIcon in MapView.tsx).
+ *
+ * We pass `className: 'person-marker'` to L.divIcon, which REPLACES Leaflet's
+ * default `leaflet-div-icon` class (white background + grey border). That
+ * means our marker root has no class-based styles and is fully exposed to
+ * Tailwind v4's preflight, which applies `box-sizing: border-box`,
+ * `border: 0 solid`, `display: block` on svg, etc. The rules below ensure
+ * the inline-styled div + inline SVG inside the icon always render at their
+ * intended size, regardless of preflight.
+ */
+.person-marker {
+  /* Leaflet positions the marker via inline transform; make sure preflight
+     doesn't accidentally hide or shrink the container. */
+  background: transparent;
+  border: 0;
+  pointer-events: auto;
+}
+.person-marker > div {
+  /* Use content-box so the inline `width`/`height` describe the visible
+     circle and the white ring is drawn outside via `border` without
+     shrinking the avatar. */
+  box-sizing: content-box;
+}
+.person-marker svg {
+  /* Tailwind preflight forces `display:block` on svg which can break the
+     centered flex layout we set up inline. Re-assert inline-block + a
+     stable size inherited from the inline width/height attributes. */
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: visible;
+}

@@ -25,3 +25,6 @@ CLAUDE.md
 *.njsproj
 *.sln
 *.sw?
+
+# Fly config (may contain deployment URL / secrets) - keep local only
+fly.toml

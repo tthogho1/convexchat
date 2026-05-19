@@ -143,16 +143,39 @@ npm run format       # prettier
    npx convex deploy
    ```
 
-2. Set the production Convex URL in `.env.production`.
+2. Set the production Convex URL so the frontend bundle knows which Convex
+  deployment to call. There are two common approaches:
 
-3. Build the frontend and deploy to your host (Vercel, Netlify, …):
+  - Build-time embedding (recommended when deploying a static site):
 
-   ```bash
-   npm run build
-   ```
+    - Pass `VITE_CONVEX_URL` as a build arg so Vite inlines it into the
+     production bundle. Example with Fly.io:
 
-4. Upload the `dist/` folder. Note: the Geolocation API requires **HTTPS**
-   in production (localhost is exempt).
+     ```bash
+     fly deploy --build-arg VITE_CONVEX_URL=https://<your-convex>.convex.cloud -a convexchat
+     ```
+
+    - Or add it to `fly.toml` so Fly injects it during the build:
+
+     ```toml
+     [build]
+      args = { VITE_CONVEX_URL = "https://<your-convex>.convex.cloud" }
+     ```
+
+  - Runtime fallback (supported by this repo): if `VITE_CONVEX_URL` is
+    not present in the bundle, the client falls back to `window.location.origin`.
+    This is convenient for testing non-production setups but embedding the
+    Convex URL at build-time is more reliable for production hosting or when
+    the frontend is served from a different origin than Convex.
+
+3. Build the frontend and deploy to your host (Vercel, Netlify, nginx, Fly, …):
+
+  ```bash
+  npm run build
+  ```
+
+4. Upload the `dist/` folder (or let your host pick it up). Note: the
+  Geolocation API requires **HTTPS** in production (localhost is exempt).
 
 ## Customization ideas
 

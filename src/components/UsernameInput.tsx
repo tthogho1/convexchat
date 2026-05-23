@@ -7,23 +7,34 @@ import {
 } from '../../convex/validation';
 
 interface UsernameInputProps {
-  onSubmit: (username: string, group?: string) => void;
+  onSubmit: (username: string, group?: string) => void | Promise<void>;
 }
 
 export function UsernameInput({ onSubmit }: UsernameInputProps) {
   const [username, setUsername] = useState('');
   const [group, setGroup] = useState('');
   const [touched, setTouched] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const validationError = validateUsername(username);
-  const canSubmit = validationError === null;
+  const canSubmit = validationError === null && !submitting;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTouched(true);
-    if (!canSubmit) return;
+    setSubmitError(null);
+    if (validationError !== null) return;
     const groupValue = group.trim() || undefined;
-    onSubmit(username, groupValue);
+    try {
+      setSubmitting(true);
+      await onSubmit(username, groupValue);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSubmitError(msg || 'Failed to continue. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Show inline errors only after the user has interacted (to avoid yelling
@@ -97,8 +108,13 @@ export function UsernameInput({ onSubmit }: UsernameInputProps) {
                      disabled:cursor-not-allowed
                      text-white font-semibold py-2 px-4 rounded-lg transition-colors"
           >
-            Continue
+            {submitting ? 'Connecting...' : 'Continue'}
           </button>
+          {submitError && (
+            <p className="text-xs mt-3 text-red-600 dark:text-red-400 break-words">
+              {submitError}
+            </p>
+          )}
         </form>
       </div>
     </div>

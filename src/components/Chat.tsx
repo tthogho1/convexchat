@@ -41,9 +41,10 @@ export function Chat({ userId, userGroup }: ChatProps) {
 
   return (
     <div
-      className={`fixed bottom-0 right-0 m-4 bg-white dark:bg-slate-800 rounded-lg shadow-xl
+      className={`fixed bottom-0 right-0 left-0 sm:left-auto m-2 sm:m-4 bg-white dark:bg-slate-800 rounded-lg shadow-xl
                   border-2 border-gray-200 dark:border-gray-700 transition-all duration-300
-                  z-50 ${isExpanded ? 'w-96 h-[500px]' : 'w-96 h-14'}`}
+                  z-50 w-auto sm:w-96 max-w-[calc(100vw-1rem)] sm:max-w-96
+                  ${isExpanded ? 'h-[min(500px,calc(100vh-1rem))] sm:h-[500px]' : 'h-14'}`}
       style={{ zIndex: 9999 }}
     >
       {/* Header */}
@@ -102,7 +103,7 @@ export function Chat({ userId, userGroup }: ChatProps) {
       {isExpanded && (
         <>
           {/* Messages */}
-          <div className="h-[380px] overflow-y-auto p-4 space-y-3">
+          <div className="h-[calc(100%-7.5rem)] sm:h-[380px] overflow-y-auto p-4 space-y-3">
             {messages?.map((msg, idx) => {
               const isOwnMessage = msg.userId === userId;
               const isDM = msg.receiverId !== undefined;

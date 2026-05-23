@@ -136,8 +136,7 @@ export const getLocationsForGroup = query({
 
     const filtered = recent.filter((loc) => {
       if (args.currentUserId && loc.userId === args.currentUserId) return true;
-      //if (!args.currentUserGroup) return false;
-      return String(loc.group ?? '') === String(args.currentUserGroup);
+      return (loc.group ?? '') === (args.currentUserGroup ?? '');
     });
 
     console.log('[getLocationsForGroup] returning', { requestedGroup: args.currentUserGroup, total: filtered.length });

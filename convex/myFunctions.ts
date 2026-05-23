@@ -111,9 +111,11 @@ export const getLocations = query({
   args: {},
   handler: async (ctx) => {
     const locations = await ctx.db.query('locations').collect();
-    // Filter out stale locations (older than 2 minutes)
-    const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-    const recent = locations.filter((loc) => loc.timestamp > twoMinutesAgo);
+    // Filter out stale locations. Keep this in sync with LOCATION_STALE_MS
+    // used by the cleanup cron so we don't show rows that are about to be
+    // deleted, nor hide rows that are still considered fresh.
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    const recent = locations.filter((loc) => loc.timestamp > cutoff);
     console.log('[getLocations] returning locations', { total: locations.length, recent: recent.length });
     return recent;
   },
@@ -128,8 +130,9 @@ export const getLocationsForGroup = query({
   },
   handler: async (ctx, args) => {
     const locations = await ctx.db.query('locations').collect();
-    const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
-    const recent = locations.filter((loc) => loc.timestamp > twoMinutesAgo);
+    // Keep in sync with cleanup cron's LOCATION_STALE_MS.
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    const recent = locations.filter((loc) => loc.timestamp > cutoff);
 
     const filtered = recent.filter((loc) => {
       if (args.currentUserId && loc.userId === args.currentUserId) return true;
@@ -229,30 +232,88 @@ export const getMessages = query({
 });
 
 // Cleanup: remove old locations and their users
+//
+// Thresholds are intentionally generous to tolerate:
+//   - Background-tab throttling of setInterval/watchPosition (can drop to
+//     ~1 update per minute in Chrome/Edge).
+//   - Short network blips or device sleep.
+// The client sends a heartbeat every 5s, so a 5 minute cutoff still
+// reclaims abandoned rows quickly without evicting active users.
+const LOCATION_STALE_MS = 5 * 60 * 1000; // 5 minutes
+const USER_STALE_MS = 10 * 60 * 1000; // 10 minutes
 export const cleanupOldLocationsAndUsers = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const oneMinuteAgo = Date.now() - 60 * 1000;
-    const allLocations = await ctx.db.query('locations').collect();
+    const now = Date.now();
+    const locationCutoff = now - LOCATION_STALE_MS;
+    const userCutoff = now - USER_STALE_MS;
 
-    // Find and delete old locations, collect their userIds
-    const removedUserIds: Set<any> = new Set();
+    // 1) Delete stale location rows only.
+    const allLocations = await ctx.db.query('locations').collect();
     for (const loc of allLocations) {
-      if (loc.timestamp < oneMinuteAgo) {
-        removedUserIds.add(loc.userId);
+      if (loc.timestamp < locationCutoff) {
         await ctx.db.delete(loc._id);
       }
     }
 
-    // Check which removed users still have remaining locations
-    const remainingLocations = await ctx.db.query('locations').collect();
-    const remainingUserIds = new Set(remainingLocations.map((loc) => loc.userId));
-
-    // Delete users who no longer have any location
-    for (const userId of removedUserIds) {
-      if (!remainingUserIds.has(userId)) {
-        await ctx.db.delete(userId);
+    // 2) Delete users that haven't been seen for a long time, regardless of
+    //    whether they currently have a location row. This avoids the previous
+    //    failure mode where a still-logged-in user got their `users` row
+    //    deleted just because their `locations` row briefly expired, which
+    //    then caused every subsequent `updateLocation` to throw
+    //    "User not found".
+    const allUsers = await ctx.db.query('users').collect();
+    for (const user of allUsers) {
+      if ((user.lastSeen ?? 0) < userCutoff) {
+        await ctx.db.delete(user._id);
       }
+    }
+
+    return null;
+  },
+});
+
+// Delete a user and all of their associated data (locations + messages they
+// sent or received). Called on explicit logout, and from the HTTP action that
+// is pinged via `navigator.sendBeacon` when the tab/browser is closed.
+export const deleteUser = mutation({
+  args: {
+    userId: v.id('users'),
+  },
+  handler: async (ctx, args) => {
+    // Delete all locations for this user (usually 0 or 1 thanks to the
+    // by_user index, but loop just in case there are stragglers).
+    const locs = await ctx.db
+      .query('locations')
+      .withIndex('by_user', (q) => q.eq('userId', args.userId))
+      .collect();
+    for (const loc of locs) {
+      await ctx.db.delete(loc._id);
+    }
+
+    // Delete messages received by this user.
+    const received = await ctx.db
+      .query('messages')
+      .withIndex('by_receiver', (q) => q.eq('receiverId', args.userId))
+      .collect();
+    for (const msg of received) {
+      await ctx.db.delete(msg._id);
+    }
+
+    // Delete messages sent by this user (no dedicated index; scan and filter).
+    const allMessages = await ctx.db.query('messages').collect();
+    for (const msg of allMessages) {
+      if (msg.userId === args.userId) {
+        await ctx.db.delete(msg._id);
+      }
+    }
+
+    // Finally, delete the user row itself. Use `get` first so a double-delete
+    // (e.g. logout button + pagehide beacon firing) is a no-op rather than an
+    // error.
+    const user = await ctx.db.get(args.userId);
+    if (user) {
+      await ctx.db.delete(args.userId);
     }
 
     return null;

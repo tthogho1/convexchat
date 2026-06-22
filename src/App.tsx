@@ -6,6 +6,7 @@ import { Id } from '../convex/_generated/dataModel';
 import { UsernameInput } from './components/UsernameInput';
 import { MapView } from './components/MapView';
 import { Chat } from './components/Chat';
+import { WikivoyageChat } from './components/WikivoyageChat';
 import { useGeolocation } from './hooks/useGeolocation';
 
 // Do not persist username/userId to localStorage; keep in-memory only
@@ -161,6 +162,9 @@ export default function App() {
 
       {/* Chat */}
       <Chat userId={userId} userGroup={group} />
+
+      {/* Wikivoyage search (chat-style) */}
+      <WikivoyageChat />
     </div>
   );
 }

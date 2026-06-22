@@ -39,12 +39,44 @@ export function Chat({ userId, userGroup }: ChatProps) {
     }
   };
 
+  // Collapsed state: show a floating chat icon button instead of the bar.
+  if (!isExpanded) {
+    return (
+      <button
+        onClick={() => setIsExpanded(true)}
+        className="fixed bottom-0 right-0 m-2 sm:m-4 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700
+                   text-white shadow-xl flex items-center justify-center transition-colors"
+        style={{ zIndex: 9999 }}
+        title="Open chat"
+        aria-label="Open chat"
+      >
+        {/* Chat bubble icon */}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+        </svg>
+        {/* Unread/message count badge */}
+        {messages && messages.length > 0 && (
+          <span className="absolute -top-1 -right-1 text-xs bg-red-500 text-white min-w-5 h-5 px-1
+                           rounded-full flex items-center justify-center">
+            {messages.length}
+          </span>
+        )}
+      </button>
+    );
+  }
+
   return (
     <div
       className={`fixed bottom-0 right-0 left-0 sm:left-auto m-2 sm:m-4 bg-white dark:bg-slate-800 rounded-lg shadow-xl
                   border-2 border-gray-200 dark:border-gray-700 transition-all duration-300
                   z-50 w-auto sm:w-96 max-w-[calc(100vw-1rem)] sm:max-w-96
-                  ${isExpanded ? 'h-[min(500px,calc(100vh-1rem))] sm:h-[500px]' : 'h-14'}`}
+                  h-[min(500px,calc(100vh-1rem))] sm:h-[500px]`}
       style={{ zIndex: 9999 }}
     >
       {/* Header */}
@@ -74,10 +106,6 @@ export function Chat({ userId, userGroup }: ChatProps) {
                 </option>
               ))}
             </select>
-
-            {messages && messages.length > 0 && !isExpanded && (
-              <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">{messages.length}</span>
-            )}
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -94,7 +122,7 @@ export function Chat({ userId, userGroup }: ChatProps) {
             </button>
           )}
           <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-            {isExpanded ? '−' : '+'}
+            −
           </button>
         </div>
       </div>

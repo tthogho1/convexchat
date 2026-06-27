@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-
-const SEARCH_API_URL = import.meta.env.VITE_SEARCH_API_URL ;
+import { useAction } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 interface SearchResult {
   title: string;
@@ -21,6 +21,8 @@ export function WikivoyageChat() {
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const resultsEndRef = useRef<HTMLDivElement>(null);
 
+  const search = useAction(api.search.wikivoyage);
+
   // Auto-scroll to bottom when new results arrive
   useEffect(() => {
     resultsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -35,17 +37,7 @@ export function WikivoyageChat() {
     setError(null);
 
     try {
-      const res = await fetch(SEARCH_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmed, numResults }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Request failed with status ${res.status}`);
-      }
-
-      const data = (await res.json()) as SearchResponse;
+      const data: SearchResponse = await search({ query: trimmed, numResults });
       setResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -155,7 +147,7 @@ export function WikivoyageChat() {
           </div>
 
           {/* Input */}
-          <form onSubmit={handleSubmit} className="p-3 border-t-2 border-gray-200 dark:border-gray-700">
+          <form onSubmit={(e) => void handleSubmit(e)} className="p-3 border-t-2 border-gray-200 dark:border-gray-700">
             <div className="flex gap-2">
               <input
                 type="text"

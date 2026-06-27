@@ -11,6 +11,7 @@
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as myFunctions from "../myFunctions.js";
+import type * as search from "../search.js";
 import type * as validation from "../validation.js";
 
 import type {
@@ -23,6 +24,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   http: typeof http;
   myFunctions: typeof myFunctions;
+  search: typeof search;
   validation: typeof validation;
 }>;
 

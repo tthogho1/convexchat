@@ -20,8 +20,12 @@ export function UsernameInput({ onSubmit }: UsernameInputProps) {
   const validationError = validateUsername(username);
   const canSubmit = validationError === null && !submitting;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    void submitUsername();
+  };
+
+  const submitUsername = async () => {
     setTouched(true);
     setSubmitError(null);
     if (validationError !== null) return;

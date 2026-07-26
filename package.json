@@ -24,9 +24,13 @@
   },
   "dependencies": {
     "@convex-dev/eslint-plugin": "^1.1.1",
+    "@livekit/components-react": "^2.9.23",
+    "@livekit/components-styles": "^1.2.0",
     "@types/leaflet": "^1.9.21",
     "convex": "^1.31.6",
     "leaflet": "^1.9.4",
+    "livekit-client": "^2.21.0",
+    "livekit-server-sdk": "^2.17.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-leaflet": "^5.0.0",

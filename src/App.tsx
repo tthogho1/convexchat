@@ -7,6 +7,7 @@ import { UsernameInput } from './components/UsernameInput';
 import { MapView } from './components/MapView';
 import { Chat } from './components/Chat';
 import { WikivoyageChat } from './components/WikivoyageChat';
+import { VideoChat } from './components/VideoChat';
 import { LandmarkSearch, type LandmarkTarget } from './components/LandmarkSearch';
 import { useGeolocation } from './hooks/useGeolocation';
 
@@ -171,6 +172,9 @@ export default function App() {
 
       {/* Wikivoyage search (chat-style) */}
       <WikivoyageChat />
+
+      {/* Video chat (LiveKit) */}
+      <VideoChat username={username} group={group} />
     </div>
   );
 }

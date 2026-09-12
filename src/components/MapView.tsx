@@ -4,6 +4,7 @@ import { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createPersonIcon, colorForUserId } from './icon/PersonIcon';
+import { LandmarksLayer } from './LandmarksLayer';
 
 interface Location {
   _id: string;
@@ -225,6 +226,7 @@ export function MapView({
         />
         <RecenterButton lat={centerLat} lng={centerLng} disabled={!hasLiveCoords} />
         <FlyToLandmark landmark={landmark} />
+        <LandmarksLayer />
         {landmark && (
           <Marker position={[landmark.latitude, landmark.longitude]} icon={landmarkIcon}>
             <Popup>

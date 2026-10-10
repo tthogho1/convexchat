@@ -2,13 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Id } from '../../convex/_generated/dataModel';
+import type { Place } from '../lib/placeActions';
 
 interface ChatProps {
   userId: Id<'users'>;
   userGroup?: string | null;
+  // Fly the map to a place shared in a message.
+  onShowPlace: (place: Place) => void;
 }
 
-export function Chat({ userId, userGroup }: ChatProps) {
+export function Chat({ userId, userGroup, onShowPlace }: ChatProps) {
   const [message, setMessage] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -149,6 +152,18 @@ export function Chat({ userId, userGroup }: ChatProps) {
                     }`}
                   >
                     {msg.text}
+                    {msg.place && (
+                      <button
+                        type="button"
+                        onClick={() => msg.place && onShowPlace(msg.place)}
+                        className={`mt-1 block w-full text-left text-xs underline ${
+                          isOwnMessage ? 'text-blue-100' : 'text-blue-600 dark:text-blue-300'
+                        }`}
+                        title={`${msg.place.latitude.toFixed(5)}, ${msg.place.longitude.toFixed(5)}`}
+                      >
+                        📍 Show on map
+                      </button>
+                    )}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">{new Date(msg.timestamp).toLocaleTimeString()}</div>
                 </div>

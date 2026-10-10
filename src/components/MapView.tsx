@@ -5,6 +5,9 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { createPersonIcon, colorForUserId } from './icon/PersonIcon';
 import { LandmarksLayer } from './LandmarksLayer';
+import { MeetingPinsLayer } from './MeetingPinsLayer';
+import { PlaceActions } from './PlaceActions';
+import { Doc } from '../../convex/_generated/dataModel';
 
 interface Location {
   _id: string;
@@ -32,6 +35,8 @@ interface MapViewProps {
   liveLongitude?: number | null;
   // Set when the user searches a landmark; the map flies there.
   landmark?: LandmarkTarget | null;
+  // Group meeting points (from getPinsForGroup).
+  pins: Doc<'pins'>[];
 }
 
 // Leaflet's default marker pulls in PNG assets that break under bundlers, so
@@ -182,6 +187,7 @@ export function MapView({
   liveLatitude,
   liveLongitude,
   landmark,
+  pins,
 }: MapViewProps) {
   // Prefer the live browser coordinates (instant) over the server-echoed
   // location (delayed by the Convex round-trip). Fall back to the server
@@ -227,11 +233,19 @@ export function MapView({
         <RecenterButton lat={centerLat} lng={centerLng} disabled={!hasLiveCoords} />
         <FlyToLandmark landmark={landmark} />
         <LandmarksLayer />
+        <MeetingPinsLayer pins={pins} locations={locations} currentUserId={currentUserId} />
         {landmark && (
           <Marker position={[landmark.latitude, landmark.longitude]} icon={landmarkIcon}>
             <Popup>
               <div className="text-center">
                 <strong>{landmark.displayName}</strong>
+                <PlaceActions
+                  place={{
+                    name: landmark.displayName,
+                    latitude: landmark.latitude,
+                    longitude: landmark.longitude,
+                  }}
+                />
               </div>
             </Popup>
           </Marker>

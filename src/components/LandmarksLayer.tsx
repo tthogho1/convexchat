@@ -4,6 +4,7 @@ import L from 'leaflet';
 import { searchLandmarksNearby, fetchLandmarkDetails } from '../lib/wikimediaClient';
 import type { Landmark } from '../types/landmark';
 import { poiIcon } from './icon/LandmarkPoiIcon';
+import { PlaceActions } from './PlaceActions';
 
 // Search radius: distance from the map center to the viewport edge, so
 // panning/zooming naturally widens or narrows the search. Wikimedia's
@@ -94,6 +95,9 @@ export function LandmarksLayer() {
                 {landmark.description && (
                   <div className="text-xs text-gray-500 mt-1">{landmark.description}</div>
                 )}
+                <PlaceActions
+                  place={{ name: landmark.title, latitude: landmark.lat, longitude: landmark.lon }}
+                />
               </div>
             </Popup>
           </Marker>

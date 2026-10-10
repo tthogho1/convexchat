@@ -1,6 +1,14 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
+// A named point on the map. Shared by meeting-point pins and by chat
+// messages that carry a place.
+export const placeValidator = v.object({
+  name: v.string(),
+  latitude: v.number(),
+  longitude: v.number(),
+});
+
 export default defineSchema({
   users: defineTable({
     username: v.string(),
@@ -25,7 +33,22 @@ export default defineSchema({
     timestamp: v.number(),
     receiverId: v.optional(v.id('users')),
     group: v.optional(v.string()),
+    // Set when the message shares a place; tapping it flies the map there.
+    place: v.optional(placeValidator),
   })
     .index('by_timestamp', ['timestamp'])
     .index('by_receiver', ['receiverId', 'timestamp']),
+
+  // Meeting points shared with everyone in the same group. Not tied to the
+  // creator's lifetime (a pin should survive its creator logging out); the
+  // cleanup cron expires them after PIN_TTL_MS.
+  pins: defineTable({
+    userId: v.id('users'),
+    username: v.string(),
+    name: v.string(),
+    latitude: v.number(),
+    longitude: v.number(),
+    createdAt: v.number(),
+    group: v.optional(v.string()),
+  }).index('by_group', ['group']),
 });

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../convex/_generated/api';
 import { Id } from '../convex/_generated/dataModel';
@@ -10,6 +9,7 @@ import { WikivoyageChat } from './components/WikivoyageChat';
 import { VideoChat } from './components/VideoChat';
 import { LandmarkSearch, type LandmarkTarget } from './components/LandmarkSearch';
 import { useGeolocation } from './hooks/useGeolocation';
+import { PlaceActionsContext, type Place, type PlaceActionsValue } from './lib/placeActions';
 
 // Do not persist username/userId to localStorage; keep in-memory only
 
@@ -56,11 +56,44 @@ export default function App() {
 
   const createUser = useMutation(api.myFunctions.createUser);
   const deleteUser = useMutation(api.myFunctions.deleteUser);
-  const locations = useQuery(api.myFunctions.getLocationsForGroup, {
-    currentUserId: userId ?? undefined,
-    currentUserGroup: group ?? undefined,
-  }) ?? [];
+  const locations =
+    useQuery(api.myFunctions.getLocationsForGroup, {
+      currentUserId: userId ?? undefined,
+      currentUserGroup: group ?? undefined,
+    }) ?? [];
   const users = useQuery(api.myFunctions.getUsers, {}) ?? [];
+  const pins =
+    useQuery(api.myFunctions.getPinsForGroup, {
+      currentUserGroup: group ?? undefined,
+    }) ?? [];
+  const addPin = useMutation(api.myFunctions.addPin);
+  const removePin = useMutation(api.myFunctions.removePin);
+  const sendMessage = useMutation(api.myFunctions.sendMessage);
+
+  const placeActions = useMemo<PlaceActionsValue | null>(() => {
+    if (!userId) return null;
+    return {
+      setMeetingPoint: async (place) => {
+        await addPin({ userId, place });
+      },
+      // Broadcast to the user's group (sendMessage falls back to user.group).
+      sharePlace: async (place) => {
+        await sendMessage({ userId, text: `📍 ${place.name}`, place });
+      },
+      removePin: async (pinId) => {
+        await removePin({ userId, pinId });
+      },
+    };
+  }, [userId, addPin, removePin, sendMessage]);
+
+  const showPlace = (place: Place) => {
+    setLandmark({
+      latitude: place.latitude,
+      longitude: place.longitude,
+      displayName: place.name,
+      key: Date.now(),
+    });
+  };
 
   // Use geolocation hook (updates every 5 seconds)
   const { latitude, longitude, error: geoError } = useGeolocation(userId, 5);
@@ -106,75 +139,76 @@ export default function App() {
   };
 
   // Show username input if not logged in
-  if (!username || !userId) {
+  if (!username || !userId || !placeActions) {
     return <UsernameInput onSubmit={handleUsernameSubmit} />;
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-800 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              MapChat
-            </h1>
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span>{users.length} user{users.length !== 1 ? 's' : ''} online</span>
-            </div>
+    <PlaceActionsContext.Provider value={placeActions}>
+      <div className="h-screen flex flex-col">
+        {/* Header */}
+        <header className="bg-white dark:bg-slate-800 border-b-2 border-gray-200 dark:border-gray-700 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">MapChat</h1>
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>
+                  {users.length} user{users.length !== 1 ? 's' : ''} online
+                </span>
+              </div>
 
-            {/* Geolocation status */}
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              {latitude && longitude ? (
-                <span className="text-green-600 dark:text-green-400">
-                  Location tracking active ({latitude.toFixed(4)}, {longitude.toFixed(4)})
-                </span>
-              ) : geoError ? (
-                <span className="text-red-600 dark:text-red-400">
-                  Location error: {geoError}
-                </span>
-              ) : (
-                <span>Requesting location access...</span>
-              )}
+              {/* Geolocation status */}
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {latitude && longitude ? (
+                  <span className="text-green-600 dark:text-green-400">
+                    Location tracking active ({latitude.toFixed(4)}, {longitude.toFixed(4)})
+                  </span>
+                ) : geoError ? (
+                  <span className="text-red-600 dark:text-red-400">Location error: {geoError}</span>
+                ) : (
+                  <span>Requesting location access...</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Logged in as <strong>{username}</strong>
+              </span>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-700 dark:text-gray-300">
-              Logged in as <strong>{username}</strong>
-            </span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Landmark search: flies the map to the entered place */}
-      <LandmarkSearch onLocate={setLandmark} />
+        {/* Landmark search: flies the map to the entered place */}
+        <LandmarkSearch onLocate={setLandmark} />
 
-      {/* Map */}
-      <main className="flex-1 relative">
-        <MapView
-          locations={locations}
-          currentUserId={userId}
-          liveLatitude={latitude}
-          liveLongitude={longitude}
-          landmark={landmark}
-        />
-      </main>
+        {/* Map */}
+        <main className="flex-1 relative">
+          <MapView
+            locations={locations}
+            currentUserId={userId}
+            liveLatitude={latitude}
+            liveLongitude={longitude}
+            landmark={landmark}
+            pins={pins}
+          />
+        </main>
 
-      {/* Chat */}
-      <Chat userId={userId} userGroup={group} />
+        {/* Chat */}
+        <Chat userId={userId} userGroup={group} onShowPlace={showPlace} />
 
-      {/* Wikivoyage search (chat-style) */}
-      <WikivoyageChat />
+        {/* Wikivoyage search (chat-style) */}
+        <WikivoyageChat />
 
-      {/* Video chat (LiveKit) */}
-      <VideoChat username={username} group={group} />
-    </div>
+        {/* Video chat (LiveKit) */}
+        <VideoChat username={username} group={group} />
+      </div>
+    </PlaceActionsContext.Provider>
   );
 }

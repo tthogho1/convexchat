@@ -1,6 +1,8 @@
 import { v } from 'convex/values';
 import { query, mutation, internalMutation } from './_generated/server';
+import type { Doc } from './_generated/dataModel';
 import { usernameSchema } from './validation';
+import { placeValidator } from './schema';
 
 // User Management
 export const createUser = mutation({
@@ -151,8 +153,11 @@ export const sendMessage = mutation({
     text: v.string(),
     receiverId: v.optional(v.id('users')),
     group: v.optional(v.string()),
+    place: v.optional(placeValidator),
   },
   handler: async (ctx, args) => {
+    const place = args.place ? normalizePlace(args.place) : undefined;
+
     // Get username
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error('User not found');
@@ -171,6 +176,7 @@ export const sendMessage = mutation({
       timestamp: Date.now(),
       receiverId: args.receiverId,
       group: messageGroup,
+      place,
     });
   },
 });
@@ -193,6 +199,10 @@ export const getMessages = query({
     // (repurposed as login time). Fall back to `lastSeen` if `createdAt` is
     // not available. If neither exists, include all messages.
     let since = 0;
+    // The group to filter broadcasts by. A known user's stored group is the
+    // source of truth (so the client can't forget to pass it); the arg is only
+    // a fallback for calls without a userId.
+    let group = args.currentUserGroup;
     if (args.userId) {
       const user = await ctx.db.get(args.userId);
       if (user) {
@@ -201,32 +211,145 @@ export const getMessages = query({
         } else if (typeof user.lastSeen === 'number') {
           since = user.lastSeen;
         }
+        group = user.group;
       }
     }
 
     // Filter messages by receiver/sender logic AND by timestamp >= since.
-    // Also apply optional group filtering via `currentUserGroup` for broadcasts.
     const filtered = messages.filter((msg) => {
       if (msg.timestamp < since) return false;
 
       // Direct messages to/from the user are always included when userId is provided
       if (args.userId && (msg.receiverId === args.userId || msg.userId === args.userId)) return true;
 
-      // Broadcast messages (no receiverId): include depending on group selection
+      // Broadcast messages (no receiverId): only from the user's own group.
+      // "No group" is its own bucket, matching getLocationsForGroup.
       if (msg.receiverId === undefined) {
-        // If no group requested, include all broadcasts
-        if (!args.currentUserGroup || args.currentUserGroup === 'all') return true;
-        // Otherwise include broadcast only if message group matches requested group
-        return String(msg.group ?? '') === String(args.currentUserGroup);
+        return (msg.group ?? '') === (group ?? '');
       }
 
-      // Messages that specify a receiver but also have a group: include if group matches requested
-      if (args.currentUserGroup && String(msg.group ?? '') === String(args.currentUserGroup)) return true;
-
+      // Someone else's DM — never visible, even within the same group.
       return false;
     });
 
     return filtered.slice(0, limit).reverse();
+  },
+});
+
+// Meeting points
+//
+// Pins are scoped to a group exactly like locations: a missing group is
+// treated as its own "no group" bucket.
+
+const PIN_NAME_MAX_LENGTH = 100;
+const MAX_PINS_PER_GROUP = 20;
+
+// Trim/validate a client-supplied place so bad input fails loudly here
+// instead of rendering a broken marker for the whole group.
+function normalizePlace(place: { name: string; latitude: number; longitude: number }) {
+  const name = place.name.trim().slice(0, PIN_NAME_MAX_LENGTH);
+  if (!name) throw new Error('Place name is required');
+  if (!Number.isFinite(place.latitude) || Math.abs(place.latitude) > 90) {
+    throw new Error('Invalid latitude');
+  }
+  if (!Number.isFinite(place.longitude) || Math.abs(place.longitude) > 180) {
+    throw new Error('Invalid longitude');
+  }
+  return { name, latitude: place.latitude, longitude: place.longitude };
+}
+
+function sameGroup(a: string | undefined, b: string | undefined) {
+  return (a ?? '') === (b ?? '');
+}
+
+const pinValidator = v.object({
+  _id: v.id('pins'),
+  _creationTime: v.number(),
+  userId: v.id('users'),
+  username: v.string(),
+  name: v.string(),
+  latitude: v.number(),
+  longitude: v.number(),
+  createdAt: v.number(),
+  group: v.optional(v.string()),
+});
+
+export const getPinsForGroup = query({
+  args: {
+    currentUserGroup: v.optional(v.string()),
+  },
+  returns: v.array(pinValidator),
+  handler: async (ctx, args) => {
+    const pins = await ctx.db
+      .query('pins')
+      .withIndex('by_group', (q) => q.eq('group', args.currentUserGroup))
+      .collect();
+    return pins.sort((a, b) => a.createdAt - b.createdAt);
+  },
+});
+
+// Create a meeting point for the user's group and announce it in chat so
+// members who aren't looking at the map still notice.
+export const addPin = mutation({
+  args: {
+    userId: v.id('users'),
+    place: placeValidator,
+  },
+  returns: v.id('pins'),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error('User not found');
+    const place = normalizePlace(args.place);
+
+    const existing = await ctx.db
+      .query('pins')
+      .withIndex('by_group', (q) => q.eq('group', user.group))
+      .collect();
+    if (existing.length >= MAX_PINS_PER_GROUP) {
+      throw new Error(`A group can have at most ${MAX_PINS_PER_GROUP} meeting points`);
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.userId, { lastSeen: now });
+
+    const pinId = await ctx.db.insert('pins', {
+      userId: args.userId,
+      username: user.username,
+      ...place,
+      createdAt: now,
+      group: user.group,
+    });
+
+    await ctx.db.insert('messages', {
+      userId: args.userId,
+      username: user.username,
+      text: `📌 Meeting point: ${place.name}`,
+      timestamp: now,
+      group: user.group,
+      place,
+    });
+
+    return pinId;
+  },
+});
+
+// Any member of the pin's group may remove it.
+export const removePin = mutation({
+  args: {
+    userId: v.id('users'),
+    pinId: v.id('pins'),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error('User not found');
+    const pin: Doc<'pins'> | null = await ctx.db.get(args.pinId);
+    if (!pin) return null; // already removed by someone else
+    if (!sameGroup(pin.group, user.group)) {
+      throw new Error('You can only remove meeting points in your own group');
+    }
+    await ctx.db.delete(args.pinId);
+    return null;
   },
 });
 
@@ -240,6 +363,7 @@ export const getMessages = query({
 // reclaims abandoned rows quickly without evicting active users.
 const LOCATION_STALE_MS = 5 * 60 * 1000; // 5 minutes
 const USER_STALE_MS = 10 * 60 * 1000; // 10 minutes
+const PIN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const cleanupOldLocationsAndUsers = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -265,6 +389,16 @@ export const cleanupOldLocationsAndUsers = internalMutation({
     for (const user of allUsers) {
       if ((user.lastSeen ?? 0) < userCutoff) {
         await ctx.db.delete(user._id);
+      }
+    }
+
+    // 3) Expire old meeting points. They intentionally outlive their
+    //    creator's session, so they need their own TTL.
+    const pinCutoff = now - PIN_TTL_MS;
+    const allPins = await ctx.db.query('pins').collect();
+    for (const pin of allPins) {
+      if (pin.createdAt < pinCutoff) {
+        await ctx.db.delete(pin._id);
       }
     }
 

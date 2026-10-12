@@ -35,6 +35,8 @@ export default defineSchema({
     group: v.optional(v.string()),
     // Set when the message shares a place; tapping it flies the map there.
     place: v.optional(placeValidator),
+    // Set on meeting-point announcements: when the pin expires (PIN_TTL_MS).
+    expiresAt: v.optional(v.number()),
   })
     .index('by_timestamp', ['timestamp'])
     .index('by_receiver', ['receiverId', 'timestamp']),

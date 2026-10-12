@@ -1,8 +1,24 @@
 import L from 'leaflet';
 
+// Icons are cached so callers get the same object on every render. react-leaflet
+// calls marker.setIcon() whenever the `icon` prop changes identity, which makes
+// Leaflet rebuild the marker's DOM; a fresh icon per render did that on every
+// location update. Only a handful of color/current-user combos exist.
+const iconCache = new Map<string, L.DivIcon>();
+
 // Build a circular “person” marker as a Leaflet divIcon. Uses an inline SVG
 // so we don't need any external image assets. `color` controls the ring/fill.
 export function createPersonIcon(color: string, isCurrentUser: boolean): L.DivIcon {
+  const key = `${color}|${isCurrentUser}`;
+  let icon = iconCache.get(key);
+  if (!icon) {
+    icon = buildPersonIcon(color, isCurrentUser);
+    iconCache.set(key, icon);
+  }
+  return icon;
+}
+
+function buildPersonIcon(color: string, isCurrentUser: boolean): L.DivIcon {
   const size = isCurrentUser ? 40 : 36;
   const ringWidth = isCurrentUser ? 3 : 2;
   // NOTE: `box-sizing:content-box` is important — Tailwind v4's preflight

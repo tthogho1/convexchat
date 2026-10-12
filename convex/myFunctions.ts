@@ -52,15 +52,25 @@ export const getUsers = query({
   handler: async (ctx, args) => {
     const users = await ctx.db.query('users').collect();
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    return users.filter((user) => {
-      if (user.lastSeen <= fiveMinutesAgo) return false;
-      if (args.group !== undefined && user.group !== args.group) return false;
-      return true;
-    });
+    // Return only what the UI uses: leaving out `lastSeen` keeps the result
+    // identical across heartbeats, so subscribed clients don't re-render.
+    return users
+      .filter((user) => {
+        if (user.lastSeen <= fiveMinutesAgo) return false;
+        if (args.group !== undefined && user.group !== args.group) return false;
+        return true;
+      })
+      .map((user) => ({ _id: user._id, username: user.username }));
   },
 });
 
 // Location Tracking
+//
+// Heartbeats arrive every few seconds, but every write re-runs the queries that
+// read the row and pushes a new result to every subscribed client. Unchanged
+// rows are only refreshed once this old — far inside the 5 min / 10 min
+// staleness windows (LOCATION_STALE_MS / USER_STALE_MS).
+const HEARTBEAT_WRITE_MS = 60 * 1000; // 1 minute
 export const updateLocation = mutation({
   args: {
     userId: v.id('users'),
@@ -68,18 +78,18 @@ export const updateLocation = mutation({
     longitude: v.number(),
   },
   handler: async (ctx, args) => {
-    console.log('[updateLocation] called', { userId: args.userId, latitude: args.latitude, longitude: args.longitude });
+    const now = Date.now();
 
     // Get username
     const user = await ctx.db.get(args.userId);
     if (!user) {
-      console.log('[updateLocation] user not found', { userId: args.userId });
       throw new Error('User not found');
     }
-    console.log('[updateLocation] user found', { userId: args.userId, username: user.username });
 
-    // Update user's lastSeen
-    await ctx.db.patch(args.userId, { lastSeen: Date.now() });
+    // Update user's lastSeen (throttled, see HEARTBEAT_WRITE_MS)
+    if (now - user.lastSeen >= HEARTBEAT_WRITE_MS) {
+      await ctx.db.patch(args.userId, { lastSeen: now });
+    }
 
     // Check if there's an existing location for this user
     const existingLocation = await ctx.db
@@ -88,23 +98,28 @@ export const updateLocation = mutation({
       .first();
 
     if (existingLocation) {
+      // Movement or a group change is written immediately; a stationary
+      // heartbeat only refreshes the timestamp once it's HEARTBEAT_WRITE_MS old.
+      const unchanged =
+        existingLocation.latitude === args.latitude &&
+        existingLocation.longitude === args.longitude &&
+        existingLocation.group === user.group;
+      if (unchanged && now - existingLocation.timestamp < HEARTBEAT_WRITE_MS) return;
       await ctx.db.patch(existingLocation._id, {
         latitude: args.latitude,
         longitude: args.longitude,
-        timestamp: Date.now(),
+        timestamp: now,
         group: user.group,
       });
-      console.log('[updateLocation] updated location', { locationId: existingLocation._id });
     } else {
-      const insertedId = await ctx.db.insert('locations', {
+      await ctx.db.insert('locations', {
         userId: args.userId,
         username: user.username,
         latitude: args.latitude,
         longitude: args.longitude,
-        timestamp: Date.now(),
+        timestamp: now,
         group: user.group,
       });
-      console.log('[updateLocation] inserted location', { locationId: insertedId });
     }
   },
 });
@@ -141,7 +156,6 @@ export const getLocationsForGroup = query({
       return (loc.group ?? '') === (args.currentUserGroup ?? '');
     });
 
-    console.log('[getLocationsForGroup] returning', { requestedGroup: args.currentUserGroup, total: filtered.length });
     return filtered;
   },
 });
@@ -327,6 +341,7 @@ export const addPin = mutation({
       timestamp: now,
       group: user.group,
       place,
+      expiresAt: now + PIN_TTL_MS,
     });
 
     return pinId;
@@ -349,6 +364,18 @@ export const removePin = mutation({
       throw new Error('You can only remove meeting points in your own group');
     }
     await ctx.db.delete(args.pinId);
+
+    const now = Date.now();
+    await ctx.db.patch(args.userId, { lastSeen: now });
+
+    // No `place` attached: a "Show on map" link to a removed pin would mislead.
+    await ctx.db.insert('messages', {
+      userId: args.userId,
+      username: user.username,
+      text: `🗑️ Meeting point removed: ${pin.name}`,
+      timestamp: now,
+      group: pin.group,
+    });
     return null;
   },
 });

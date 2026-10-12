@@ -60,7 +60,6 @@ export function useGeolocation(userId: Id<'users'> | null, intervalSeconds: numb
 
     const sendToServer = (latitude: number, longitude: number) => {
       lastSentAt = Date.now();
-      console.log('[useGeolocation] sending location to server', { userId, latitude, longitude });
       void updateLocation({ userId, latitude, longitude }).catch((err) => {
         console.error('[useGeolocation] Failed to update location:', err);
       });
@@ -69,7 +68,12 @@ export function useGeolocation(userId: Id<'users'> | null, intervalSeconds: numb
     const handleSuccess: PositionCallback = (position) => {
       const { latitude, longitude } = position.coords;
       lastCoords = { latitude, longitude };
-      setState(() => ({ latitude, longitude, error: null }));
+      // Returning `prev` when nothing changed lets React skip the re-render.
+      setState((prev) =>
+        prev.latitude === latitude && prev.longitude === longitude && prev.error === null
+          ? prev
+          : { latitude, longitude, error: null },
+      );
 
       // Throttle server updates from watchPosition to roughly the desired
       // interval; the heartbeat below guarantees we keep the row alive.

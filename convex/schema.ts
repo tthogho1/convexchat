@@ -24,7 +24,9 @@ export default defineSchema({
     longitude: v.number(),
     timestamp: v.number(),
     group: v.optional(v.string()),
-  }).index('by_user', ['userId']),
+  })
+    .index('by_user', ['userId'])
+    .index('by_group', ['group']),
 
   messages: defineTable({
     userId: v.id('users'),

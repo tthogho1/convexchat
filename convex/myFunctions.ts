@@ -146,17 +146,29 @@ export const getLocationsForGroup = query({
     currentUserGroup: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const locations = await ctx.db.query('locations').collect();
+    // Indexed on `group` so clients sharing a group reuse one query result
+    // instead of each client forcing its own full-table scan.
+    const sameGroup = await ctx.db
+      .query('locations')
+      .withIndex('by_group', (q) => q.eq('group', args.currentUserGroup))
+      .collect();
+
     // Keep in sync with cleanup cron's LOCATION_STALE_MS.
     const cutoff = Date.now() - 5 * 60 * 1000;
-    const recent = locations.filter((loc) => loc.timestamp > cutoff);
+    const recent = sameGroup.filter((loc) => loc.timestamp > cutoff);
 
-    const filtered = recent.filter((loc) => {
-      if (args.currentUserId && loc.userId === args.currentUserId) return true;
-      return (loc.group ?? '') === (args.currentUserGroup ?? '');
-    });
+    // The current user's own location might be in a different group (e.g.
+    // they just switched groups) or missing from `recent` if stale; always
+    // include it so the map still shows "you".
+    if (args.currentUserId && !recent.some((loc) => loc.userId === args.currentUserId)) {
+      const own = await ctx.db
+        .query('locations')
+        .withIndex('by_user', (q) => q.eq('userId', args.currentUserId!))
+        .first();
+      if (own) recent.push(own);
+    }
 
-    return filtered;
+    return recent;
   },
 });
 

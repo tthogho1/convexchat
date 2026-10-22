@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -181,6 +181,61 @@ function RecenterButton({
   );
 }
 
+// Renders the person markers, restricted to the current viewport.
+//
+// Bounds live as local state here (inside the Leaflet map instance) rather
+// than being lifted into App/Convex: `locations` is already scoped to the
+// user's group server-side and shared across every client in that group via
+// Convex's query cache. If we instead sent each client's viewport bounds to
+// the server, every client would get distinct query args and lose that
+// sharing, forcing a separate backend computation per connected client. So
+// we filter the group's (already-small) result set to the viewport here,
+// client-side, cutting rendered markers without touching the shared query.
+function PersonMarkersLayer({
+  locations,
+  currentUserId,
+}: {
+  locations: Location[];
+  currentUserId: string;
+}) {
+  const map = useMap();
+  const [bounds, setBounds] = useState(() => map.getBounds());
+
+  useMapEvents({ moveend: () => setBounds(map.getBounds()) });
+
+  // Pad so markers near the edge don't pop in/out while panning.
+  const padded = useMemo(() => bounds.pad(0.2), [bounds]);
+  const visible = useMemo(
+    () => locations.filter((loc) => padded.contains([loc.latitude, loc.longitude])),
+    [locations, padded],
+  );
+
+  return (
+    <>
+      {visible.map((location) => {
+        const isCurrentUser = location.userId === currentUserId;
+        const markerColor = isCurrentUser ? '#1f6feb' : colorForUserId(location.userId);
+        const icon = createPersonIcon(markerColor, isCurrentUser);
+        return (
+          <Marker key={location._id} position={[location.latitude, location.longitude]} icon={icon}>
+            <Popup>
+              <div className="text-center">
+                <strong className={isCurrentUser ? 'text-blue-600' : ''}>
+                  {location.username}
+                </strong>
+                {isCurrentUser && <div className="text-sm text-blue-600">(You)</div>}
+                <div className="text-xs text-gray-500 mt-1">
+                  {new Date(location.timestamp).toLocaleTimeString()}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+    </>
+  );
+}
+
 export function MapView({
   locations,
   currentUserId,
@@ -250,30 +305,7 @@ export function MapView({
             </Popup>
           </Marker>
         )}
-        {locations.map((location) => {
-          const isCurrentUser = location.userId === currentUserId;
-          const markerColor = isCurrentUser ? '#1f6feb' : colorForUserId(location.userId);
-          const icon = createPersonIcon(markerColor, isCurrentUser);
-          return (
-            <Marker
-              key={location._id}
-              position={[location.latitude, location.longitude]}
-              icon={icon}
-            >
-              <Popup>
-                <div className="text-center">
-                  <strong className={isCurrentUser ? 'text-blue-600' : ''}>
-                    {location.username}
-                  </strong>
-                  {isCurrentUser && <div className="text-sm text-blue-600">(You)</div>}
-                  <div className="text-xs text-gray-500 mt-1">
-                    {new Date(location.timestamp).toLocaleTimeString()}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+        <PersonMarkersLayer locations={locations} currentUserId={currentUserId} />
       </MapContainer>
     </div>
   );

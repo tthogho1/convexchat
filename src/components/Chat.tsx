@@ -152,6 +152,19 @@ export function Chat({ userId, userGroup, onShowPlace }: ChatProps) {
                     }`}
                   >
                     {msg.text}
+                    {msg.expiresAt !== undefined && (
+                      <div
+                        className={`text-xs mt-1 ${isOwnMessage ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}
+                      >
+                        ⏰ Expires{' '}
+                        {new Date(msg.expiresAt).toLocaleString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                    )}
                     {msg.place && (
                       <button
                         type="button"

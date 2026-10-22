@@ -60,12 +60,12 @@ export const wikivoyage = action({
     }
 
     const data = (await res.json()) as {
-      results?: { title: string; content: string }[];
+      results?: { title: string; content: string; url?: string }[];
       summary?: string;
     };
 
     return {
-      results: data.results ?? [],
+      results: (data.results ?? []).map(({ title, content }) => ({ title, content })),
       summary: data.summary ?? '',
     };
   },

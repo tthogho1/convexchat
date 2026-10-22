@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { searchLandmarksNearby, fetchLandmarkDetails } from '../lib/wikimediaClient';
@@ -22,8 +22,10 @@ const FETCH_DEBOUNCE_MS = 500;
 
 // Fetches nearby Wikimedia landmarks around the current map viewport and
 // renders them as markers. Runs its own debounced search on `moveend` so it
-// stays independent of the person-location markers in MapView.
-export function LandmarksLayer() {
+// stays independent of the person-location markers in MapView. Memoized: it
+// takes no props, so parent re-renders (driven by location updates) shouldn't
+// re-render every landmark marker.
+export const LandmarksLayer = memo(function LandmarksLayer() {
   const map = useMap();
   const [landmarks, setLandmarks] = useState<Landmark[]>([]);
   const [details, setDetails] = useState<Record<number, Partial<Landmark>>>({});
@@ -105,4 +107,4 @@ export function LandmarksLayer() {
       })}
     </>
   );
-}
+});

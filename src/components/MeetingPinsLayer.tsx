@@ -91,9 +91,7 @@ function PinPopup({
           type="button"
           disabled={busy}
           onClick={() =>
-            void run(() =>
-              sharePlace({ name: pin.name, latitude: pin.latitude, longitude: pin.longitude }),
-            )
+            void run(() => sharePlace({ name: pin.name, latitude: pin.latitude, longitude: pin.longitude }))
           }
           className="text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-2 py-1 rounded"
         >
@@ -118,14 +116,17 @@ function PinPopup({
 function DropPin() {
   const map = useMap();
   const { setMeetingPoint } = usePlaceActions();
-  const [position, setPosition] = useState<{ lat: number; lng: number } | null>(null);
+  // Stored as a tuple (not rebuilt in render) so its identity is stable:
+  // react-leaflet's Popup re-runs its open/remove effect whenever `position`
+  // changes identity, which would close the popup on every keystroke.
+  const [position, setPosition] = useState<[number, number] | null>(null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useMapEvents({
     contextmenu: (e) => {
-      setPosition({ lat: e.latlng.lat, lng: e.latlng.lng });
+      setPosition([e.latlng.lat, e.latlng.lng]);
       setName('');
       setError(null);
     },
@@ -140,7 +141,7 @@ function DropPin() {
     setBusy(true);
     setError(null);
     try {
-      await setMeetingPoint({ name: trimmed, latitude: position.lat, longitude: position.lng });
+      await setMeetingPoint({ name: trimmed, latitude: position[0], longitude: position[1] });
       map.closePopup();
       setPosition(null);
     } catch (err) {
@@ -151,10 +152,7 @@ function DropPin() {
   };
 
   return (
-    <Popup
-      position={[position.lat, position.lng]}
-      eventHandlers={{ remove: () => setPosition(null) }}
-    >
+    <Popup position={position} eventHandlers={{ remove: () => setPosition(null) }}>
       <form onSubmit={(e) => void handleSubmit(e)} style={{ minWidth: 180 }}>
         <div className="text-xs font-semibold mb-1">New meeting point</div>
         <input
